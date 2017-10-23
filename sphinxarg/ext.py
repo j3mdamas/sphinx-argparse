@@ -67,7 +67,7 @@ def renderList(l, markDownHelp, settings=None):
         return document.children
 
 
-def print_action_groups(data, nested_content, markDownHelp=False, settings=None):
+def print_action_groups(data, nested_content, _title, markDownHelp=False, settings=None):
     """
     Process all 'action groups', which are also include 'Options' and 'Required
     arguments'. A list of nodes is returned.
@@ -78,7 +78,7 @@ def print_action_groups(data, nested_content, markDownHelp=False, settings=None)
         for action_group in data['action_groups']:
             # Every action group is comprised of a section, holding a title, the description, and the option group (members)
             section = nodes.section(ids=[action_group['title']])
-            section += nodes.title(action_group['title'], action_group['title'])
+            section += _title(action_group['title'], action_group['title'])
 
             desc = []
             if action_group['description']:
@@ -151,7 +151,7 @@ def print_action_groups(data, nested_content, markDownHelp=False, settings=None)
     return nodes_list
 
 
-def print_subcommands(data, nested_content, markDownHelp=False):
+def print_subcommands(data, nested_content, _title, markDownHelp=False):
     """
     Each subcommand is a dictionary with the following keys:
 
@@ -165,11 +165,11 @@ def print_subcommands(data, nested_content, markDownHelp=False):
     items = []
     if 'children' in data:
         subCommands = nodes.section(ids=["Sub-commands:"])
-        subCommands += nodes.title('Sub-commands:', 'Sub-commands:')
+        subCommands += _title('Sub-commands:', 'Sub-commands:')
 
         for child in data['children']:
             sec = nodes.section(ids=[child['name']])
-            sec += nodes.title(child['name'], child['name'])
+            sec += _title(child['name'], child['name'])
 
             if 'description' in child and child['description']:
                 desc = [child['description']]
@@ -192,10 +192,10 @@ def print_subcommands(data, nested_content, markDownHelp=False):
             for element in renderList(desc, markDownHelp):
                 sec += element
             sec += nodes.literal_block(text=child['bare_usage'])
-            for x in print_action_groups(child, nested_content + subContent, markDownHelp):
+            for x in print_action_groups(child, nested_content + subContent, _title, markDownHelp):
                 sec += x
 
-            for x in print_subcommands(child, nested_content + subContent, markDownHelp):
+            for x in print_subcommands(child, nested_content + subContent, _title, markDownHelp):
                 sec += x
 
             subCommands += sec
@@ -236,9 +236,9 @@ class ArgParseDirective(Directive):
                        nodefaultconst=flag, filename=unchanged,
                        manpage=unchanged, nosubcommands=unchanged, passparser=flag,
                        noepilog=unchanged, nodescription=unchanged,
-                       markdown=flag, markdownhelp=flag)
+                       markdown=flag, markdownhelp=flag, userubric=flag)
 
-    def _construct_manpage_specific_structure(self, parser_info):
+    def _construct_manpage_specific_structure(self, parser_info, _title):
         """
         Construct a typical man page consisting of the following elements:
             NAME (automatically generated, out of our control)
@@ -253,7 +253,7 @@ class ArgParseDirective(Directive):
         # SYNOPSIS section
         synopsis_section = nodes.section(
             '',
-            nodes.title(text='Synopsis'),
+            _title(text='Synopsis'),
             nodes.literal_block(text=parser_info["bare_usage"]),
             ids=['synopsis-section'])
         items.append(synopsis_section)
@@ -261,7 +261,7 @@ class ArgParseDirective(Directive):
         if 'nodescription' not in self.options:
             description_section = nodes.section(
                 '',
-                nodes.title(text='Description'),
+                _title(text='Description'),
                 nodes.paragraph(text=parser_info.get(
                     'description', parser_info.get(
                         'help', "undocumented").capitalize())),
@@ -284,7 +284,7 @@ class ArgParseDirective(Directive):
         # OPTIONS section
         options_section = nodes.section(
             '',
-            nodes.title(text='Options'),
+            _title(text='Options'),
             ids=['options-section'])
         if 'args' in parser_info:
             options_section += nodes.paragraph()
@@ -308,7 +308,7 @@ class ArgParseDirective(Directive):
             # SUBCOMMANDS section (non-standard)
             subcommands_section = nodes.section(
                 '',
-                nodes.title(text='Sub-Commands'),
+                _title(text='Sub-Commands'),
                 ids=['subcommands-section'])
             if 'children' in parser_info:
                 subcommands_section += self._format_subcommands(parser_info)
@@ -319,7 +319,7 @@ class ArgParseDirective(Directive):
             # DEBUG section (non-standard)
             debug_section = nodes.section(
                 '',
-                nodes.title(text="Argparse + Sphinx Debugging"),
+                _title(text="Argparse + Sphinx Debugging"),
                 nodes.literal_block(text=json.dumps(parser_info, indent='  ')),
                 ids=['debug-section'])
             items.append(debug_section)
@@ -450,8 +450,12 @@ class ArgParseDirective(Directive):
         result = parse_parser(
             parser, skip_default_values='nodefault' in self.options, skip_default_const_values='nodefaultconst' in self.options)
         result = parser_navigate(result, path)
+        if 'userubric' in self.options:
+            _title = nodes.rubric
+        else:
+            _title = nodes.title
         if 'manpage' in self.options:
-            return self._construct_manpage_specific_structure(result)
+            return self._construct_manpage_specific_structure(result, _title)
 
         # Handle nested content, where markdown needs to be preprocessed
         items = []
@@ -476,10 +480,10 @@ class ArgParseDirective(Directive):
             else:
                 items.append(self._nested_parse_paragraph(result['description']))
         items.append(nodes.literal_block(text=result['usage']))
-        items.extend(print_action_groups(result, nested_content, markDownHelp,
+        items.extend(print_action_groups(result, nested_content, _title, markDownHelp,
                                          settings=self.state.document.settings))
         if 'nosubcommands' not in self.options:
-            items.extend(print_subcommands(result, nested_content, markDownHelp))
+            items.extend(print_subcommands(result, nested_content, _title, markDownHelp))
         if 'epilog' in result and 'noepilog' not in self.options:
             items.append(self._nested_parse_paragraph(result['epilog']))
 
